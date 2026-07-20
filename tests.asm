@@ -6,7 +6,10 @@
 
 ;-------- TABELA DE CORES -------;
 ; 0 branco                       ;	
-; todo                           ;
+; 64512 azul                     ;
+; 58112 verde                    ;
+; 7936 vermelho                  ;
+; todo: mais cores               ;
 ;--------------------------------;						
 
 ;---- strings --------------------------------------
@@ -22,10 +25,10 @@ main:
     loadn r1, #10
     call set_cursor_pos ;set cursor to (1,10)
 
-    loadn r0, #'.'
+    loadn r0, #'-'
     loadn r1, #38
-	loadn r2, #0
-    call print_hline ;print horizontal line of 5 '.' with white color
+	loadn r3, #64512
+    call print_hline ;print horizontal line of 5 '-' with blue color
 
 
 	loadn r0, #39
@@ -34,7 +37,7 @@ main:
 
 	loadn r0, #'|'
 	loadn r1, #30
-	loadn r2, #0
+	loadn r3, #0
 	call print_vline ;print vertical line of 30 '|'  with white color
 
 	loadn r0, #0
@@ -43,10 +46,23 @@ main:
 
 	loadn r0, #'|'
 	loadn r1, #30
-	loadn r2, #0
+	loadn r3, #0
 	call print_vline ;print vertical line of 30 '|'  with white color
-
 	;end exemplo -----------------------------------
+
+	;exemplo: desenhar retangulo -------------------
+
+	loadn r0, #5
+	loadn r1, #20
+	call set_cursor_pos ;set cursor to (5,20)
+
+    loadn r0, #"O" ;caracter = O
+	loadn r1, #5 ;comprimento = 8
+	loadn r2, #3 ;altura = 5
+	loadn r3, #7936 ;cor vermelho
+	call print_rect ;printar
+	;end exemplo -----------------------------------
+
 
 	;exemplo: printar strings ----------------------
 	loadn r0, #1
@@ -102,15 +118,16 @@ get_cursor_pos:
 ;entradas:
 ;caracter-> r0
 ;comprimento-> r1 (indo pra direita)
-;cor-> r2
-print_hline: 
-    add r1, r7, r1
-	add r0, r0, r2
-
+;cor-> r3
+print_hline:
+	add r0, r0, r3
+    loadn r4, #0
+	
     hline_loop:
         outchar r0, r7
         inc r7
-        cmp r7, r1
+		inc r4
+        cmp r4, r1
         jle hline_loop
 
     rts
@@ -119,9 +136,9 @@ print_hline:
 ;entradas:
 ;caracter-> r0
 ;comprimento-> r1 (indo pra baixo)
-;cor-> r2
+;cor-> r3
 print_vline:
-	add r0, r0, r2 
+	add r0, r0, r3 
 	loadn r4, #0
 	loadn r5, #40
 	
@@ -132,9 +149,35 @@ print_vline:
 		cmp r4, r1
 		jle vline_loop
 	rts
+
 ;printa retangulo
 ;entradas:
-;r0
+;caracter-> r0 
+;comprimento-> r1 (indo pra direita)
+;altura-> r2 (indo pra baixo)
+;cor->r3
+print_rect:
+	add r0, r0, r3
+	loadn r6, #0
+	loadn r5, #40
+
+	rect_outloop:
+		loadn r4, #0
+
+		rect_inloop:
+			outchar r0, r7
+        	inc r7
+			inc r4
+        	cmp r4, r1
+        	jle rect_inloop
+
+		sub r7, r7, r1
+		add r7, r7, r5
+		inc r6
+		cmp r6, r2
+		jle rect_outloop
+
+	rts
 
 
 ;printa string

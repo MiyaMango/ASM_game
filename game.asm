@@ -346,7 +346,7 @@ accel_up: ;(this is jumping)
     loadi r1, r4             ; r1 = current mag
 
     loadn r2, #1             ; delta dir = 1 (up)
-    loadn r3, #10            ; delta mag = THRESHOLD (full jump strength)
+    loadn r3, #10         ; delta mag = THRESHOLD (full jump strength)
     call signed_add          ; r0,r1 = new dir,mag
     call clamp_mag10         ; keep mag <= THRESHOLD (tunneling guard)
 
@@ -376,7 +376,7 @@ accel_left:
     loadi r1, r4           ; r1 = current mag
 
     loadn r2, #1           ; delta dir = 1 (left)
-    loadn r3, #2          ; delta mag = 1
+    loadn r3, #2           ; delta mag
     call signed_add        ; r0,r1 = new dir,mag
     call clamp_mag10       ; keep mag <= THRESHOLD
 
@@ -405,7 +405,7 @@ accel_right:
     loadi r1, r4           ; r1 = current mag
 
     loadn r2, #0           ; delta dir = 0 (right)
-    loadn r3, #2           ; delta mag = 1
+    loadn r3, #2           ; delta mag 
     call signed_add        ; r0,r1 = new dir,mag
     call clamp_mag10       ; keep mag <= THRESHOLD
 

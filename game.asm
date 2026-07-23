@@ -24,8 +24,8 @@ blank_sprite: string " "
 ;---------------------------------------------------
 
 ;---- physics variables ----------------------------
-; a arquitetura não tem numeros negativos, então armazenamos a magnitude da velocidade
-; e a o sinal dela separadamente
+; This architecture cannot represent negative numbers, so every "signed"
+; quantity is split into a direction flag (0/1) and an unsigned magnitude.
 ; X: dir 0 = right, 1 = left.  Y: dir 0 = down, 1 = up.
 vel_x_dir: string "\0"   
 vel_x_mag: string "\0"   
@@ -35,6 +35,13 @@ accum_x_dir: string "\0"    ; fractional-tile progress toward the next X step
 accum_x_mag: string "\0"    
 accum_y_dir: string "\0"    ; fractional-tile progress toward the next Y step
 accum_y_mag: string "\0"    
+dirty: string "\0"          ; 1 if the player actually moved this tick (avoids
+                             ; needless erase+redraw flicker when standing still)
+;---------------------------------------------------
+; THRESHOLD = 10 units == 1 tile. vel_x_mag/vel_y_mag are capped at
+; THRESHOLD, so an accumulator can never gain more than THRESHOLD in a
+; single tick, which guarantees at most 1 tile of movement per axis per
+; tick.
 ;---------------------------------------------------
 
 ;---- map data --------------------------------------
@@ -80,15 +87,22 @@ main:
     loadn r0, #5           ;set initial player coords
     loadn r1, #5           
     call set_player_pos    
+    call draw_player       ; initial draw so the player is visible before tick 1
 
 	game_loop:
 
 	; --- 2. PHYSICS TICK ---
     call apply_velocity     ; moves player based on current momentum
 
-    ; --- 3. DRAW ---
+    ; --- 3. DRAW (only if the player actually moved this tick) ---
+    loadn r0, #dirty        
+    loadi r1, r0             
+    loadn r0, #0             
+    cmp r1, r0               
+    jeq skip_draw            
     call draw_player        ; draw the character at the current r7 position
 
+skip_draw:
     ; --- 4. INPUT ---
     call handle_input       ; wait for and process player input
 
@@ -117,16 +131,16 @@ draw_map:
 
     loadn r0, #map_data     ; r0 = memory pointer for the map dat
     loadn r1, #0            ; r1 = screen position (starts at top-left, index 0
-    loadn r2, #1200         ; r2 = total tiles on a 40x30 screen
-    loadn r3, #'\0'         ; r3 = null terminator to check for
+    loadn r2, #1200         ; r2 = total tiles on a 40x30 screen[cite: 1, 2]
+    loadn r3, #'\0'         ; r3 = null terminator to check for[cite: 1, 2]
     loadn r4, #'1'          ; r4 = wall character in our map dat
     loadn r5, #'#'          ; r5 = visual character to draw for wall
 
 draw_map_loop:
     cmp r1, r2              ; check if we have drawn 1200 tile
-    jeq draw_map_end        ; if equal, we are done
+    jeq draw_map_end        ; if equal, we are don
 
-    loadi r6, r0            ; read the current character from map data
+    loadi r6, r0            ; read the current character from map dat
     
     ; check for null terminator and skip if found
     cmp r6, r3              
@@ -138,11 +152,11 @@ draw_map_loop:
     
     ; if it is not a wall (it's '0'), draw an empty space
     loadn r6, #' '          
-    outchar r6, r1          ; print space at current screen position
+    outchar r6, r1          ; print space at current screen positio
     jmp next_tile           
 
 draw_wall:
-    outchar r5, r1          ; print '#' at current screen position
+    outchar r5, r1          ; print '#' at current screen positio
 
 next_tile:
     inc r1                  ; advance to the next screen positio
@@ -310,20 +324,20 @@ accel_up: ;(this is jumping)
     add r6, r7, r4          ; r6 = target screen position below playe
 
     ; Convert screen index in r6 to memory index (using stride of 41)
-    loadn r4, #40           
-    div r2, r6, r4          
-    mod r3, r6, r4           
-    loadn r4, #41           ; memory row length
+    loadn r4, #40           ;[cite: 1, 2]
+    div r2, r6, r4          ; r2 = 
+    mod r3, r6, r4          ; r3 = 
+    loadn r4, #41           ; memory row lengt
     mul r2, r2, r4          ; Y * 4
-    add r2, r2, r3          ; exact memory offset
+    add r2, r2, r3          ; exact memory offse
 
     loadn r0, #map_data     
-    add r0, r0, r2          ; map address + offset
-    loadi r1, r0            ; load tile from memory
+    add r0, r0, r2          ; map address + offse
+    loadi r1, r0            ; load tile from memor
 
-    loadn r4, #'0'          ; '0' means empty space 
-    cmp r1, r4              ; check if the tile below is empty
-    jeq cancel_jump         ; if it is '0', you cannot jump
+    loadn r4, #'0'          ; '0' means empty space (not a floor
+    cmp r1, r4              ; check if the tile below is empty spac
+    jeq cancel_jump         ; if it is '0' (air), you cannot jump
 
     ; --- 2. Apply Jump Velocity (upward impulse of THRESHOLD units) ---
     loadn r4, #vel_y_dir     
@@ -362,7 +376,7 @@ accel_left:
     loadi r1, r4           ; r1 = current mag
 
     loadn r2, #1           ; delta dir = 1 (left)
-    loadn r3, #2           ; delta mag = 1
+    loadn r3, #2          ; delta mag = 1
     call signed_add        ; r0,r1 = new dir,mag
     call clamp_mag10       ; keep mag <= THRESHOLD
 
@@ -463,6 +477,30 @@ clamp_mag10_end:
     pop r4                   
     rts                      
 
+; mark_dirty: called right before the player's position actually changes.
+; Erases the sprite from its current spot (only once per tick, even if
+; both axes move) and sets the dirty flag so game_loop knows to redraw.
+mark_dirty:
+    push r0                  
+    push r4                  
+
+    loadn r4, #dirty         
+    loadi r0, r4             
+    loadn r4, #0             
+    cmp r0, r4               
+    jne mark_dirty_end       ; already dirty this tick -- already erased, skip
+
+    call erase_player        
+
+    loadn r4, #dirty         
+    loadn r0, #1             
+    storei r4, r0            
+
+mark_dirty_end:
+    pop r4                   
+    pop r0                   
+    rts                      
+
 ;----------------------------------------------------------------;
 
 ; apply_friction: slows vel_x back toward 0, but only when grounded
@@ -527,44 +565,44 @@ check_collision:
     push r3                 
     push r4                 
 
-    loadn r5, #0            ; default: assume no collision
-    loadn r0, #map_data     ; load the base address of the map
+    loadn r5, #0            ; default: assume no collisio
+    loadn r0, #map_data     ; load the base address of the ma
 
     ; --- Convert Screen Index to Memory Index ---
     ; r6 is the screen index (stride of 40). We map it to memory (stride of 41).
-    loadn r4, #40           
-    div r2, r6, r4         
-    mod r3, r6, r4          
+    loadn r4, #40           ;[cite: 1, 2]
+    div r2, r6, r4          ; r2 = Y (r6 / 40
+    mod r3, r6, r4          ; r3 = X (r6 % 40
 
     loadn r4, #41           ; row length in memory (40 chars + '\0')
-    mul r2, r2, r4          
-    add r2, r2, r3          
+    mul r2, r2, r4          ; r2 = Y * 4
+    add r2, r2, r3          ; r2 = (Y * 41) + X (exact memory offset
 
-    add r1, r0, r2          
-    loadn r4, #'0'          ;'0' is empty space
+    add r1, r0, r2          ; r1 = map_data address + exact memory offse
+    loadn r4, #'0'          ; we consider '0' as our empty space til
 
     ; --- Check Top Character ---
-    loadi r2, r1            ; pull the map tile from memory
-    cmp r2, r4              ; compare the tile to '0'
-    jne collision_found     ; if it is NOT '0', we hit a wall type
+    loadi r2, r1            ; pull the map tile from memor
+    cmp r2, r4              ; compare the tile to '0
+    jne collision_found     ; if it is NOT '0', we hit a wall typ
 
     ; --- Check Middle Character ---
     loadn r3, #41           ; load memory stride of 41
-    add r1, r1, r3          ; advance map address by exactly 1 row in memory
+    add r1, r1, r3          ; advance map address by exactly 1 row in memor
     loadi r2, r1            ; pull the middle til
     cmp r2, r4              
     jne collision_found     
 
     ; --- Check Bottom Character ---
-    add r1, r1, r3          ; advance map address by another row in memory
-    loadi r2, r1            ; pull the bottom tile
+    add r1, r1, r3          ; advance map address by another row in memor
+    loadi r2, r1            ; pull the bottom til
     cmp r2, r4              
     jne collision_found     
 
-    jmp end_collision       ; if we reach here, all 3 tiles are empty space ('0')
+    jmp end_collision       ; if we reach here, all 3 tiles are empty space ('0'
 
 collision_found:
-    loadn r5, #1            ; set the output flag to 1
+    loadn r5, #1            ; set the output flag to 1 (collision
 
 end_collision:
     pop r4                  
@@ -576,6 +614,12 @@ end_collision:
       
 ;----------------------------------------------------------------;
 
+;----------------------------------------------------------------;
+; apply_velocity: handles velocity, gravity, speed caps, and collisions
+;----------------------------------------------------------------;
+;----------------------------------------------------------------;
+; apply_velocity: handles axis-independent velocity and collisions
+;----------------------------------------------------------------;
 apply_velocity:
     push r0                 
     push r1                 
@@ -584,6 +628,12 @@ apply_velocity:
     push r4                 
     push r5                 
     push r6                 
+
+    ; Reset the dirty flag for this tick -- mark_dirty will set it back to
+    ; 1 the moment (if ever) the player's position actually changes below.
+    loadn r0, #dirty         
+    loadn r1, #0             
+    storei r0, r1            
 
     ; --- 1. Apply Gravity to Vertical Velocity (capped at THRESHOLD) ---
     loadn r4, #vel_y_dir     
@@ -637,10 +687,6 @@ apply_velocity:
     jmp skip_velocity       ; grounded with 0 velocity -- truly nothing to do
 
 start_movement:
-    ; Erase the player from their current position FIRST, 
-    ; before we change r7 or test collisions.
-    call erase_player       
-
     ; ==========================================
     ; HORIZONTAL MOVEMENT (X Axis)
     ; accum_x += vel_x (both are dir+magnitude pairs). Only when the
@@ -693,6 +739,7 @@ accum_x_check_collision:
     cmp r5, r4                 
     jeq hit_horizontal_wall    
 
+    call mark_dirty              ; erase old sprite + flag this tick as dirty
     mov r7, r6                  ; step succeeds
     loadn r4, #10                ; THRESHOLD
     sub r1, r1, r4                ; consume the threshold, keep the remainder
@@ -757,6 +804,7 @@ accum_y_check_collision:
     cmp r5, r4                                      
     jeq hit_vertical_wall                            
 
+    call mark_dirty                                       ; erase old sprite + flag this tick as dirty
     mov r7, r6                                        ; step succeeds
     loadn r4, #10                                       ; THRESHOLD
     sub r1, r1, r4                                        ; consume the threshold, keep remainder
